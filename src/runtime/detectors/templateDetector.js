@@ -1,14 +1,11 @@
 const {
   buildTemplateAttachmentKey,
+  buildTemplateSearchProjection,
   createTemplateAttachmentPayload
 } = require("../shared/templateAttachmentPayload");
 
 async function detectTemplateAttachment(input) {
-  if (input?.content?.kind !== "text") {
-    return [];
-  }
-
-  const payload = createTemplateAttachmentPayload(input?.content?.payload?.text ?? "");
+  const payload = createTemplateAttachmentPayload(input);
   if (!payload) {
     return [];
   }
@@ -16,8 +13,9 @@ async function detectTemplateAttachment(input) {
   return [
     {
       attachmentType: "plugin.template.full.preview",
-      attachmentKey: buildTemplateAttachmentKey(payload),
+      attachmentKey: 'primary',
       payloadJson: JSON.stringify(payload),
+      searchProjection: buildTemplateSearchProjection(payload),
       attachmentSyncScope: "syncable"
     }
   ];

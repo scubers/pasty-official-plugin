@@ -1,17 +1,20 @@
 const { actionResult } = require("../sdk/results/actionResult");
+const {
+  buildActionExecutionSnapshot,
+  buildItemDisplay,
+  formatTemplateDebugJSON
+} = require("../shared/templateCapabilityMetadata");
 
-function summarizeText(text) {
-  const normalized = String(text || "").trim();
-  if (!normalized) {
-    return "Template auto action received empty text.";
-  }
-
-  const [firstLine, secondLine] = normalized.split(/\r?\n/);
+function summarizeExecution(input, ctx) {
+  const display = buildItemDisplay(input?.item);
+  const snapshot = buildActionExecutionSnapshot(input, ctx);
   return [
     "Template Auto Action",
-    `Title: ${firstLine || "Untitled"}`,
-    `Summary: ${secondLine || "Add your domain-specific output here."}`
-  ].join("\n");
+    `${display.typeLabel}: ${display.headline}`,
+    display.subheadline,
+    "",
+    formatTemplateDebugJSON(snapshot)
+  ].join("\n").trim();
 }
 
 function createTemplateAutoAction() {
@@ -25,10 +28,9 @@ function createTemplateAutoAction() {
       };
     },
 
-    async invokeOperation(input) {
-      const summary = summarizeText(input?.item?.text || "");
-      return actionResult.text(summary, {
-        userMessage: "Template summary ready"
+    async invokeOperation(input, ctx) {
+      return actionResult.text(summarizeExecution(input, ctx), {
+        userMessage: "Template action context ready"
       });
     }
   };

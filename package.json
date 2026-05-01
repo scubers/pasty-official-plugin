@@ -5,6 +5,9 @@
   "description": "Source-based template plugin for Pasty detector, renderer, and action authoring.",
   "scripts": {
     "clean": "rm -rf dist",
+    "dev": "vite --host 127.0.0.1 --open /src/ui/preview/preview-host/index.html",
+    "dev:renderer": "vite --host 127.0.0.1 --open /src/ui/preview/preview-host/index.html?view=renderer",
+    "dev:action": "vite --host 127.0.0.1 --open /src/ui/preview/preview-host/index.html?view=action",
     "build:runtime": "node ./scripts/build-runtime.mjs",
     "build:ui": "node ./scripts/build-ui.mjs",
     "verify:build": "node ./scripts/verify-build.mjs",

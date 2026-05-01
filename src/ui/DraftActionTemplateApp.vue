@@ -1,72 +1,62 @@
 <template>
   <main class="shell action-shell">
-    <div v-if="sessionState.action" class="action-layout">
-      <section class="editor-card">
-        <div class="editor-card__header">
-          <p class="editor-card__eyebrow">Draft Action Template</p>
-          <h1 class="editor-card__title">
+    <section v-if="sessionState.action" class="editor-panel">
+      <header class="editor-panel__header">
+        <div class="editor-panel__heading">
+          <p class="editor-panel__eyebrow">Action</p>
+          <h1 class="editor-panel__title">
             {{ sessionState.displayName || sessionState.action.title }}
           </h1>
-          <p class="editor-card__subtitle">
-            这里保留了 bootstrap、draft 同步和运行按钮的最小示例，开发者可以直接替换字段和交互逻辑。
-          </p>
         </div>
-
-        <label class="editor-field">
-          <span class="editor-field__label">Title</span>
-          <input v-model="title" class="editor-field__input" type="text" />
-        </label>
-
-        <label class="editor-field">
-          <span class="editor-field__label">Template Tag</span>
-          <input v-model="templateTag" class="editor-field__input" type="text" />
-        </label>
-
-        <label class="editor-field">
-          <span class="editor-field__label">Note</span>
-          <textarea v-model="note" class="editor-field__textarea" />
-        </label>
-
-        <label class="editor-toggle">
+        <label class="editor-panel__toggle" aria-label="Pin item when applying metadata">
           <input v-model="shouldPin" type="checkbox" />
-          <span>Pin item when applying metadata</span>
+          <span>Pin</span>
+        </label>
+      </header>
+
+      <div class="editor-panel__fields">
+        <label class="editor-panel__field">
+          <span class="editor-panel__label">Tag</span>
+          <input
+            v-model="templateTag"
+            class="editor-panel__input"
+            type="text"
+            placeholder="Add a short tag"
+          />
         </label>
 
-        <div class="editor-actions">
-          <button class="editor-actions__primary" type="button" @click="runFromUI('apply-template')">
-            Apply
-          </button>
-          <button class="editor-actions__secondary" type="button" @click="runFromUI('apply-and-pin')">
-            Apply + Pin
-          </button>
-        </div>
-      </section>
+        <label class="editor-panel__field">
+          <span class="editor-panel__label">Note</span>
+          <textarea
+            v-model="note"
+            class="editor-panel__textarea"
+            placeholder="Optional note"
+          />
+        </label>
+      </div>
 
-      <section class="preview-card">
-        <p class="preview-card__eyebrow">Draft Preview</p>
-        <pre class="preview-card__body">{{ previewText }}</pre>
-      </section>
-    </div>
+      <p class="editor-panel__hint">
+        Draft updates sync live. Use the host action strip to copy or submit.
+      </p>
+    </section>
 
     <div v-else class="empty-state">
-      <p class="empty-state__title">Waiting for template draft action bootstrap…</p>
-      <p class="empty-state__body">Open the template draft action from Action Panel to inspect the session.</p>
+      <p class="empty-state__title">Waiting for action session</p>
+      <p class="empty-state__body">Open the template draft action from Action Panel to inspect the live input.</p>
     </div>
   </main>
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { usePluginActionSession } from "./composables/usePluginActionSession";
 
 const {
   session,
-  syncDraft,
-  runAction
+  syncDraft
 } = usePluginActionSession();
 
 const sessionState = session;
-const title = ref("");
 const templateTag = ref("");
 const note = ref("");
 const shouldPin = ref(false);
@@ -74,7 +64,6 @@ const shouldPin = ref(false);
 watch(
   () => sessionState.draft,
   (draft) => {
-    title.value = String(draft?.title ?? "");
     templateTag.value = String(draft?.templateTag ?? "");
     note.value = String(draft?.note ?? "");
     shouldPin.value = Boolean(draft?.shouldPin);
@@ -82,160 +71,173 @@ watch(
   { immediate: true, deep: true }
 );
 
-watch([title, templateTag, note, shouldPin], () => {
-  syncDraft({
-    title: title.value,
+function buildDraftPayload() {
+  return {
+    title: sessionState.draft?.title ?? "",
     templateTag: templateTag.value,
     note: note.value,
-    shouldPin: shouldPin.value
-  });
-});
-
-const previewText = computed(() => [
-  `Title: ${title.value || "Template draft title"}`,
-  `Template Tag: ${templateTag.value || "template-plugin"}`,
-  `Pin On Apply: ${shouldPin.value ? "Yes" : "No"}`,
-  "",
-  note.value.trim() || "Add draft-only guidance or preview output here."
-].join("\n"));
-
-function runFromUI(buttonID) {
-  runAction({
-    buttonID,
-    buttonTitle: buttonID,
-    draft: {
-      title: title.value,
-      templateTag: templateTag.value,
-      note: note.value,
-      shouldPin: shouldPin.value
+    shouldPin: shouldPin.value,
+    __templateDebug: {
+      sessionSnapshot: {
+        pluginID: sessionState.pluginID,
+        actionID: sessionState.actionID,
+        action: sessionState.action,
+        item: sessionState.item,
+        displayName: sessionState.displayName,
+        buttons: sessionState.buttons,
+        defaultButtonID: sessionState.defaultButtonID
+      }
     }
-  });
+  };
 }
+
+watch(
+  [templateTag, note, shouldPin],
+  () => {
+    syncDraft(buildDraftPayload());
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>
 .action-shell {
-  background:none;
-    /* radial-gradient(circle at top left, rgba(251, 191, 36, 0.18), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(20, 184, 166, 0.18), transparent 32%),
-    linear-gradient(180deg, #fffaf0, #eefbf7); */
+  height: 100%;
+  /* padding: 14px 16px 12px; */
+  background: none;
 }
 
-.action-layout {
-  display: grid;
-  gap: 14px;
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: flex-start;
+  height: 100%;
+  min-height: 0;
+  padding: 14px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
 }
 
-.editor-card,
-.preview-card {
-  padding: 18px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 18px 44px rgba(148, 163, 184, 0.18);
+.editor-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.editor-card__eyebrow,
-.preview-card__eyebrow {
+.editor-panel__heading {
+  min-width: 0;
+}
+
+.editor-panel__eyebrow {
   margin: 0;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #0f766e;
+  color: #64748b;
 }
 
-.editor-card__title {
-  margin: 10px 0 0;
-  font-size: 20px;
+.editor-panel__title {
+  margin: 4px 0 0;
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.editor-card__subtitle {
-  margin: 8px 0 0;
-  color: #475569;
-  font-size: 13px;
-  line-height: 1.55;
+.editor-panel__fields {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
 }
 
-.editor-field {
+.editor-panel__field {
+  min-width: 0;
+}
+
+.editor-panel__label {
   display: block;
-  margin-top: 16px;
-}
-
-.editor-field__label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 12px;
+  margin-bottom: 5px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #475569;
 }
 
-.editor-field__input,
-.editor-field__textarea {
+.editor-panel__input,
+.editor-panel__textarea {
   width: 100%;
-  box-sizing: border-box;
-  border-radius: 14px;
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  background: rgba(248, 250, 252, 0.96);
-  padding: 12px 14px;
-  font-size: 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(248, 250, 252, 0.88);
+  padding: 9px 10px;
+  font-size: 12px;
   color: #0f172a;
+  outline: none;
 }
 
-.editor-field__textarea {
-  min-height: 110px;
-  resize: vertical;
+.editor-panel__textarea {
+  min-height: 58px;
+  max-height: 58px;
+  resize: none;
 }
 
-.editor-toggle {
+.editor-panel__input:focus,
+.editor-panel__textarea:focus {
+  border-color: #0f172a;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+}
+
+.editor-panel__toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 16px;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.92);
   color: #334155;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 
-.editor-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 18px;
+.editor-panel__hint {
+  margin: auto 0 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
-.editor-actions__primary,
-.editor-actions__secondary {
-  appearance: none;
-  border-radius: 14px;
-  padding: 12px 16px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.editor-actions__primary {
-  border: 0;
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
-  color: #f8fafc;
-}
-
-.editor-actions__secondary {
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  background: rgba(255, 255, 255, 0.8);
-  color: #0f172a;
-}
-
-.preview-card__body {
-  margin: 10px 0 0;
+.empty-state {
+  height: 100%;
+  display: grid;
+  place-items: center;
   padding: 16px;
-  border-radius: 16px;
-  background: #e2e8f0;
-  color: #0f172a;
+  text-align: center;
+}
+
+.empty-state__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.empty-state__body {
+  margin: 8px 0 0;
+  color: #64748b;
   font-size: 13px;
-  line-height: 1.6;
-  white-space: pre-wrap;
+  line-height: 1.45;
 }
 </style>

@@ -32,7 +32,7 @@
     {
       "id": "template-detector",
       "title": "Template Detector",
-      "supportedInputKinds": ["text"],
+      "supportedInputKinds": ["text", "image", "pathReference"],
       "attachmentTypes": ["plugin.template.full.preview"]
     }
   ],
@@ -40,16 +40,16 @@
     {
       "id": "template-auto-action",
       "title": "Template Auto Action",
-      "supportedItemTypes": ["text"],
+      "supportedItemTypes": ["text", "image", "path_reference"],
       "lifecycle": "auto-run",
-      "keywords": ["template", "summary", "text"]
+      "keywords": ["template", "metadata", "debug"]
     },
     {
       "id": "template-draft-action",
       "title": "Template Draft Action",
-      "supportedItemTypes": ["text"],
+      "supportedItemTypes": ["text", "image", "path_reference"],
       "lifecycle": "draft",
-      "keywords": ["template", "draft", "metadata"],
+      "keywords": ["template", "draft", "metadata", "copy"],
       "uiEntry": "actions/template-draft-action/index.html"
     }
   ]

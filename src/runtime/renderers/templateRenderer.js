@@ -3,6 +3,10 @@ const {
   decodeTemplateAttachmentPayload,
   formatTemplateAttachmentPayload
 } = require("../shared/templateAttachmentPayload");
+const {
+  buildRendererCopySnapshot,
+  formatTemplateDebugJSON
+} = require("../shared/templateCapabilityMetadata");
 
 function resolveAttachment(input) {
   const payload = decodeTemplateAttachmentPayload(input?.attachment?.payloadJson);
@@ -11,18 +15,18 @@ function resolveAttachment(input) {
       displayName: "Template Preview",
       tintHex: "#6B7280",
       buttons: [
-        { id: "copy-json", title: "Copy JSON", isEnabled: false },
-        { id: "copy-summary", title: "Copy Summary", isEnabled: false }
+        { id: "copy-payload-json", title: "Copy Payload", isEnabled: false },
+        { id: "copy-renderer-context", title: "Copy Context", isEnabled: false }
       ]
     };
   }
 
   return {
-    displayName: `Template Preview · ${payload.title}`,
+    displayName: `Template Preview · ${payload.display.headline}`,
     tintHex: "#0F766E",
     buttons: [
-      { id: "copy-json", title: "Copy JSON", isEnabled: true },
-      { id: "copy-summary", title: "Copy Summary", isEnabled: true }
+      { id: "copy-payload-json", title: "Copy Payload", isEnabled: true },
+      { id: "copy-renderer-context", title: "Copy Context", isEnabled: true }
     ]
   };
 }
@@ -33,14 +37,18 @@ async function invokeOperation(input, ctx) {
     return rendererResult.failure("Invalid template payload");
   }
 
-  if (input.buttonID === "copy-json") {
+  if (input.buttonID === "copy-payload-json") {
     await ctx.host.clipboard.copyText(formatTemplateAttachmentPayload(payload));
     return rendererResult.success({ userMessage: "Template payload copied" });
   }
 
-  if (input.buttonID === "copy-summary") {
-    await ctx.host.clipboard.copyText(payload.summary);
-    return rendererResult.success({ userMessage: "Template summary copied" });
+  if (input.buttonID === "copy-renderer-context") {
+    await ctx.host.clipboard.copyText(
+      formatTemplateDebugJSON(
+        buildRendererCopySnapshot(input, ctx, input?.params ?? {})
+      )
+    );
+    return rendererResult.success({ userMessage: "Template renderer context copied" });
   }
 
   return rendererResult.success();

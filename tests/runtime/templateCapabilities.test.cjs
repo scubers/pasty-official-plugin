@@ -20,7 +20,7 @@ test("manifest registers template detector, renderer, and actions", () => {
 
   const detector = manifest.detectors.find((entry) => entry.id === "template-detector");
   assert.ok(detector, "expected template-detector to be declared in manifest");
-  assert.deepEqual(detector.supportedInputKinds, ["text"]);
+  assert.deepEqual(detector.supportedInputKinds, ["text", "image", "pathReference"]);
   assert.deepEqual(detector.attachmentTypes, ["plugin.template.full.preview"]);
 
   const renderer = manifest.attachmentRenderers.find((entry) => entry.id === "template-renderer");
@@ -31,10 +31,12 @@ test("manifest registers template detector, renderer, and actions", () => {
   const autoAction = manifest.actions.find((entry) => entry.id === "template-auto-action");
   assert.ok(autoAction, "expected template-auto-action to be declared in manifest");
   assert.equal(autoAction.lifecycle, "auto-run");
+  assert.deepEqual(autoAction.supportedItemTypes, ["text", "image", "path_reference"]);
 
   const draftAction = manifest.actions.find((entry) => entry.id === "template-draft-action");
   assert.ok(draftAction, "expected template-draft-action to be declared in manifest");
   assert.equal(draftAction.lifecycle, "draft");
+  assert.deepEqual(draftAction.supportedItemTypes, ["text", "image", "path_reference"]);
   assert.equal(draftAction.uiEntry, "actions/template-draft-action/index.html");
 });
 
@@ -45,6 +47,9 @@ test("package declares only the template build dependencies", () => {
 
   assert.equal(packageJSON.name, "@pasty/template-plugin");
   assert.ok(packageJSON.dependencies.vue, "expected vue dependency");
+  assert.ok(packageJSON.scripts.dev, "expected local preview dev script");
+  assert.ok(packageJSON.scripts["dev:renderer"], "expected renderer preview dev script");
+  assert.ok(packageJSON.scripts["dev:action"], "expected action preview dev script");
   assert.equal(packageJSON.dependencies.gridjs, undefined);
   assert.equal(packageJSON.dependencies.luxon, undefined);
   assert.equal(packageJSON.dependencies.yaml, undefined);
@@ -68,6 +73,7 @@ test("runtime setup registers template handlers", () => {
 
 test("template source files exist in runtime and ui trees", () => {
   const requiredPaths = [
+    "src/runtime/shared/templateCapabilityMetadata.js",
     "src/runtime/shared/templateAttachmentPayload.js",
     "src/runtime/detectors/templateDetector.js",
     "src/runtime/renderers/templateRenderer.js",
@@ -75,6 +81,11 @@ test("template source files exist in runtime and ui trees", () => {
     "src/runtime/actions/templateDraftAction.js",
     "src/ui/AttachmentTemplateApp.vue",
     "src/ui/DraftActionTemplateApp.vue",
+    "src/ui/preview/PreviewShellApp.vue",
+    "src/ui/preview/preview-host/main.js",
+    "src/ui/preview/preview-host/index.html",
+    "src/ui/preview/scenarios/attachmentScenarios.js",
+    "src/ui/preview/scenarios/actionScenarios.js",
     "src/ui/renderers/template-renderer/index.html",
     "src/ui/renderers/template-renderer/main.js",
     "src/ui/actions/template-draft-action/index.html",
@@ -106,12 +117,64 @@ test("template detector emits preview attachment for text input", async () => {
 
   assert.equal(artifacts.length, 1);
   assert.equal(artifacts[0].attachmentType, "plugin.template.full.preview");
+  assert.equal(artifacts[0].searchProjection.scope, "template_preview");
 
   const payload = JSON.parse(artifacts[0].payloadJson);
   assert.equal(payload.kind, "template_preview");
-  assert.equal(payload.title, "Template plugin headline");
-  assert.equal(payload.metadata.lineCount, 3);
-  assert.equal(payload.metadata.characterCount, 47);
+  assert.equal(payload.contentKind, "text");
+  assert.equal(payload.display.typeLabel, "Text");
+  assert.equal(payload.display.headline, "Template plugin headline");
+  assert.equal(payload.display.facts[0].value, "3");
+  assert.equal(payload.display.facts[1].value, "47");
+});
+
+test("template detector emits compact payloads for image and path-reference input", async () => {
+  const { detectTemplateAttachment } = require(path.resolve(
+    projectRoot,
+    "src/runtime/detectors/templateDetector.js"
+  ));
+
+  const imageArtifacts = await detectTemplateAttachment({
+    item: {
+      id: "image-item",
+      type: "image",
+      text: null,
+      tags: [],
+      sourceAppID: "preview.app"
+    },
+    content: {
+      kind: "image",
+      payload: {
+        dataBase64: Buffer.from("image-bytes").toString("base64"),
+        width: 320,
+        height: 200,
+        format: "png"
+      }
+    }
+  });
+  assert.equal(imageArtifacts.length, 1);
+  assert.equal(JSON.parse(imageArtifacts[0].payloadJson).display.typeLabel, "Image");
+
+  const pathArtifacts = await detectTemplateAttachment({
+    item: {
+      id: "path-item",
+      type: "path_reference",
+      text: null,
+      tags: [],
+      sourceAppID: "finder"
+    },
+    content: {
+      kind: "pathReference",
+      payload: {
+        entries: [
+          { kind: "file", path: "/tmp/report.txt", displayName: "report.txt" },
+          { kind: "folder", path: "/tmp/archive", displayName: "archive" }
+        ]
+      }
+    }
+  });
+  assert.equal(pathArtifacts.length, 1);
+  assert.equal(JSON.parse(pathArtifacts[0].payloadJson).display.typeLabel, "Path");
 });
 
 test("template renderer resolves buttons and copies payload json", async () => {
@@ -122,12 +185,16 @@ test("template renderer resolves buttons and copies payload json", async () => {
 
   const payloadJson = JSON.stringify({
     kind: "template_preview",
-    title: "Template plugin headline",
-    summary: "Second line",
-    sourceText: "Template plugin headline\nSecond line",
-    metadata: {
-      lineCount: 2,
-      characterCount: 36
+    version: 2,
+    contentKind: "text",
+    display: {
+      typeLabel: "Text",
+      headline: "Template plugin headline",
+      subheadline: "Second line",
+      facts: [
+        { label: "Lines", value: "2" },
+        { label: "Chars", value: "36" }
+      ]
     }
   });
   const attachment = { payloadJson };
@@ -136,14 +203,14 @@ test("template renderer resolves buttons and copies payload json", async () => {
   assert.equal(resolved.displayName, "Template Preview · Template plugin headline");
   assert.deepEqual(
     resolved.buttons.map((entry) => entry.id),
-    ["copy-json", "copy-summary"]
+    ["copy-payload-json", "copy-renderer-context"]
   );
 
   let copiedText = null;
   const output = await invokeOperation(
     {
       attachment,
-      buttonID: "copy-json"
+      buttonID: "copy-payload-json"
     },
     {
       host: {
@@ -177,7 +244,7 @@ test("template draft action applies tags and pin state", async () => {
 
   assert.deepEqual(
     session.buttons.map((entry) => entry.id),
-    ["apply-template", "apply-and-pin"]
+    ["copy-item-json", "copy-session-json", "copy-draft-json", "apply-metadata"]
   );
   assert.equal(session.initialDraft.templateTag, "template-plugin");
 
@@ -194,7 +261,7 @@ test("template draft action applies tags and pin state", async () => {
         templateTag: "release-note",
         shouldPin: true
       },
-      buttonID: "apply-and-pin"
+      buttonID: "apply-metadata"
     },
     {
       host: {
@@ -218,4 +285,38 @@ test("template draft action applies tags and pin state", async () => {
   assert.equal(result.userMessage, "Template metadata applied and pinned");
   assert.deepEqual(appliedTags, ["existing", "template-plugin", "release-note"]);
   assert.equal(pinnedValue, true);
+});
+
+test("template auto action returns copyable metadata for non-text items", async () => {
+  const { createTemplateAutoAction } = require(path.resolve(
+    projectRoot,
+    "src/runtime/actions/templateAutoAction.js"
+  ));
+
+  const action = createTemplateAutoAction();
+  const result = await action.invokeOperation(
+    {
+      item: {
+        id: "image-item",
+        type: "image",
+        text: null,
+        tags: ["asset"],
+        sourceAppID: "preview.app"
+      },
+      draft: {},
+      buttonID: null,
+      triggerSource: "autoRun"
+    },
+    {
+      request: { id: "request-1" },
+      plugin: { id: "plugin.template.full" },
+      capability: { id: "template-auto-action" },
+      host: { capabilities: {} }
+    }
+  );
+
+  assert.equal(result.result.resultKind, "text");
+  assert.match(result.result.text, /Template Auto Action/);
+  assert.match(result.result.text, /Image: Image item/);
+  assert.match(result.result.text, /"triggerSource": "autoRun"/);
 });
