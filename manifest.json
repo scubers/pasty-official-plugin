@@ -32,7 +32,7 @@
     {
       "id": "template-detector",
       "title": "Template Detector",
-      "supportedInputKinds": ["text", "image", "pathReference"],
+      "supportedInputKinds": ["text", "image", "path_reference"],
       "attachmentTypes": ["plugin.template.full.preview"]
     }
   ],

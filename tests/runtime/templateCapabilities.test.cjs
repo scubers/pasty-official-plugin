@@ -20,7 +20,7 @@ test("manifest registers template detector, renderer, and actions", () => {
 
   const detector = manifest.detectors.find((entry) => entry.id === "template-detector");
   assert.ok(detector, "expected template-detector to be declared in manifest");
-  assert.deepEqual(detector.supportedInputKinds, ["text", "image", "pathReference"]);
+  assert.deepEqual(detector.supportedInputKinds, ["text", "image", "path_reference"]);
   assert.deepEqual(detector.attachmentTypes, ["plugin.template.full.preview"]);
 
   const renderer = manifest.attachmentRenderers.find((entry) => entry.id === "template-renderer");
@@ -100,6 +100,65 @@ test("template source files exist in runtime and ui trees", () => {
   }
 });
 
+test("preview workbench uses resizable host viewport instead of fixed shell sizes", () => {
+  const previewShellSource = fs.readFileSync(
+    path.resolve(projectRoot, "src/ui/preview/PreviewShellApp.vue"),
+    "utf8"
+  );
+
+  assert.equal(
+    previewShellSource.includes('height: "320px"'),
+    false,
+    "expected renderer preview height to stop using a fixed 320px shell"
+  );
+  assert.equal(
+    previewShellSource.includes('width: "350px"'),
+    false,
+    "expected action preview width to stop using a fixed 350px shell"
+  );
+  assert.equal(
+    previewShellSource.includes('height: "250px"'),
+    false,
+    "expected action preview height to stop using a fixed 250px shell"
+  );
+  assert.equal(
+    previewShellSource.includes("Responsive height 320"),
+    false,
+    "expected static renderer size label to be removed"
+  );
+  assert.equal(
+    previewShellSource.includes("Fixed size 350 × 250"),
+    false,
+    "expected static action size label to be removed"
+  );
+  assert.match(
+    previewShellSource,
+    /host-frame__viewport|viewportStyle|startResize/,
+    "expected preview shell to implement a resizable viewport"
+  );
+  assert.match(
+    previewShellSource,
+    /host-frame__chrome|Host resize/,
+    "expected resize affordance to be presented as host chrome"
+  );
+  const viewportStart = previewShellSource.indexOf('<div class="host-frame__viewport"');
+  const viewportEnd = previewShellSource.indexOf("</div>", viewportStart);
+  const chromeStart = previewShellSource.indexOf('<div class="host-frame__chrome">');
+  const handleStart = previewShellSource.indexOf('class="host-frame__resize-handle"');
+
+  assert.notEqual(viewportStart, -1, "expected preview shell viewport markup");
+  assert.notEqual(chromeStart, -1, "expected host chrome wrapper markup");
+  assert.notEqual(handleStart, -1, "expected resize handle markup");
+  assert.ok(
+    chromeStart > viewportEnd,
+    "expected host chrome to be rendered after the plugin content viewport"
+  );
+  assert.ok(
+    handleStart > chromeStart,
+    "expected resize handle to live inside host chrome instead of plugin content"
+  );
+});
+
 test("template detector emits preview attachment for text input", async () => {
   const { detectTemplateAttachment } = require(path.resolve(
     projectRoot,
@@ -164,7 +223,7 @@ test("template detector emits compact payloads for image and path-reference inpu
       sourceAppID: "finder"
     },
     content: {
-      kind: "pathReference",
+      kind: "path_reference",
       payload: {
         entries: [
           { kind: "file", path: "/tmp/report.txt", displayName: "report.txt" },
@@ -175,6 +234,41 @@ test("template detector emits compact payloads for image and path-reference inpu
   });
   assert.equal(pathArtifacts.length, 1);
   assert.equal(JSON.parse(pathArtifacts[0].payloadJson).display.typeLabel, "Path");
+});
+
+test("template detector manifest and runtime reject legacy pathReference spelling", async () => {
+  const manifest = loadManifest();
+  const detector = manifest.detectors.find((entry) => entry.id === "template-detector");
+
+  assert.ok(detector, "expected template-detector to be declared in manifest");
+  assert.equal(detector.supportedInputKinds.includes("pathReference"), false);
+
+  const { detectTemplateAttachment } = require(path.resolve(
+    projectRoot,
+    "src/runtime/detectors/templateDetector.js"
+  ));
+
+  await assert.rejects(
+    () =>
+      detectTemplateAttachment({
+        item: {
+          id: "path-item",
+          type: "path_reference",
+          text: null,
+          tags: [],
+          sourceAppID: "finder"
+        },
+        content: {
+          kind: "pathReference",
+          payload: {
+            entries: [
+              { kind: "file", path: "/tmp/report.txt", displayName: "report.txt" }
+            ]
+          }
+        }
+      }),
+    /path_reference/
+  );
 });
 
 test("template renderer resolves buttons and copies payload json", async () => {

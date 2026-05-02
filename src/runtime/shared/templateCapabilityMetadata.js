@@ -25,8 +25,11 @@ function createFact(label, value) {
 }
 
 function mapContentKind(kind) {
-  if (kind === "pathReference" || kind === "path_reference") {
-    return "pathReference";
+  if (kind === "path_reference") {
+    return "path_reference";
+  }
+  if (kind === "pathReference") {
+    throw new Error("Legacy content kind 'pathReference' is not supported. Use 'path_reference'.");
   }
   if (kind === "image") {
     return "image";
@@ -35,8 +38,11 @@ function mapContentKind(kind) {
 }
 
 function mapItemType(type) {
-  if (type === "path_reference" || type === "pathReference") {
-    return "pathReference";
+  if (type === "path_reference") {
+    return "path_reference";
+  }
+  if (type === "pathReference") {
+    throw new Error("Legacy item type 'pathReference' is not supported. Use 'path_reference'.");
   }
   if (type === "image") {
     return "image";
@@ -131,7 +137,7 @@ function buildContentDisplay(contentKind, payload) {
   if (canonicalKind === "image") {
     return buildImageDisplay(payload);
   }
-  if (canonicalKind === "pathReference") {
+  if (canonicalKind === "path_reference") {
     return buildPathReferenceDisplay(payload?.entries);
   }
   return buildTextDisplay(payload?.text);

@@ -42,8 +42,22 @@
         </div>
 
         <div class="host-frame__surface">
-          <div class="host-frame__webview" :style="frameStyle">
-            <component :is="activeComponent" :key="componentKey" />
+          <div class="host-frame__viewport-shell">
+            <div class="host-frame__viewport" :style="viewportStyle">
+              <div class="host-frame__webview">
+                <component :is="activeComponent" :key="componentKey" />
+              </div>
+            </div>
+
+            <div class="host-frame__chrome">
+              <span class="host-frame__chrome-label">Host resize</span>
+              <button
+                class="host-frame__resize-handle"
+                type="button"
+                aria-label="Resize host preview viewport"
+                @pointerdown="startResize"
+              />
+            </div>
           </div>
 
           <div class="host-frame__strip">
@@ -64,10 +78,10 @@
       <aside class="workbench__notes">
         <p class="workbench__notes-title">Preview Notes</p>
         <p class="workbench__notes-body">
-          This workbench simulates fixed host chrome, theme changes, and bootstrap/search/theme events.
+          This workbench simulates host chrome, theme changes, and bootstrap/search/theme events.
         </p>
         <p class="workbench__notes-body">
-          Host strip buttons are illustrative here. In local preview, bridge calls fall back to console logging.
+          Use the host resize control below the preview viewport. In local preview, bridge calls fall back to console logging.
         </p>
         <p class="workbench__notes-status">{{ statusMessage }}</p>
       </aside>
@@ -76,7 +90,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import AttachmentTemplateApp from "../AttachmentTemplateApp.vue";
 import DraftActionTemplateApp from "../DraftActionTemplateApp.vue";
 import { attachmentScenarios } from "./scenarios/attachmentScenarios";
@@ -107,11 +121,30 @@ const activeDefaultButtonID = computed(() => activeScenario.value?.bootstrap?.de
 
 const componentKey = computed(() => `${selectedView.value}:${activeScenario.value?.id ?? "unknown"}`);
 
-const frameStyle = computed(() => selectedView.value === "renderer"
-  ? { width: "100%", height: "320px" }
-  : { width: "350px", height: "250px" });
+const minimumViewportSizes = {
+  renderer: { width: 320, height: 220 },
+  action: { width: 320, height: 220 }
+};
 
-const frameSizeLabel = computed(() => selectedView.value === "renderer" ? "Responsive height 320" : "Fixed size 350 × 250");
+const viewportSizes = reactive({
+  renderer: { width: 560, height: 320 },
+  action: { width: 350, height: 250 }
+});
+
+const viewportStyle = computed(() => {
+  const size = viewportSizes[selectedView.value];
+  return {
+    width: `${size.width}px`,
+    height: `${size.height}px`
+  };
+});
+
+const frameSizeLabel = computed(() => {
+  const size = viewportSizes[selectedView.value];
+  return `${size.width} × ${size.height}`;
+});
+
+let resizeSession = null;
 
 watch(selectedView, (view) => {
   selectedScenarioID.value = resolveInitialScenarioID(view);
@@ -190,6 +223,53 @@ function previewHostButton(button) {
     buttonID: button.id
   });
 }
+
+function startResize(event) {
+  event.preventDefault();
+  stopResize();
+
+  const view = selectedView.value;
+  resizeSession = {
+    view,
+    startPointerX: event.clientX,
+    startPointerY: event.clientY,
+    startWidth: viewportSizes[view].width,
+    startHeight: viewportSizes[view].height
+  };
+
+  window.addEventListener("pointermove", handleResizePointerMove);
+  window.addEventListener("pointerup", stopResize);
+  window.addEventListener("pointercancel", stopResize);
+}
+
+function stopResize() {
+  resizeSession = null;
+  window.removeEventListener("pointermove", handleResizePointerMove);
+  window.removeEventListener("pointerup", stopResize);
+  window.removeEventListener("pointercancel", stopResize);
+}
+
+function handleResizePointerMove(event) {
+  if (!resizeSession) {
+    return;
+  }
+
+  const { view, startPointerX, startPointerY, startWidth, startHeight } = resizeSession;
+  const minimumSize = minimumViewportSizes[view];
+
+  viewportSizes[view].width = Math.max(
+    minimumSize.width,
+    Math.round(startWidth + (event.clientX - startPointerX))
+  );
+  viewportSizes[view].height = Math.max(
+    minimumSize.height,
+    Math.round(startHeight + (event.clientY - startPointerY))
+  );
+}
+
+onBeforeUnmount(() => {
+  stopResize();
+});
 </script>
 
 <style scoped>
@@ -259,6 +339,7 @@ function previewHostButton(button) {
   background: rgba(15, 23, 42, 0.34);
   border: 1px solid rgba(45, 212, 191, 0.2);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: auto;
 }
 
 .workbench[data-theme="light"] .host-frame {
@@ -284,15 +365,60 @@ function previewHostButton(button) {
 .host-frame__surface {
   display: grid;
   gap: 12px;
+  justify-items: start;
+}
+
+.host-frame__viewport-shell {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.host-frame__viewport {
+  flex: none;
 }
 
 .host-frame__webview {
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   border-radius: 20px;
 }
 
-.host-frame--action .host-frame__webview {
-  width: 350px;
+.host-frame__chrome {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.host-frame__chrome-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.88);
+}
+
+.host-frame__resize-handle {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  padding: 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, transparent 0 48%, rgba(148, 163, 184, 0.82) 48% 56%, transparent 56% 100%),
+    rgba(15, 23, 42, 0.78);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+  cursor: nwse-resize;
+}
+
+.host-frame__resize-handle:hover {
+  background:
+    linear-gradient(135deg, transparent 0 48%, rgba(226, 232, 240, 0.96) 48% 56%, transparent 56% 100%),
+    rgba(15, 23, 42, 0.92);
 }
 
 .host-frame__strip {
@@ -326,6 +452,16 @@ function previewHostButton(button) {
 .workbench[data-theme="light"] .host-frame__button--primary {
   background: #0f172a;
   color: #f8fafc;
+}
+
+.workbench[data-theme="light"] .host-frame__chrome-label {
+  color: rgba(71, 85, 105, 0.92);
+}
+
+.workbench[data-theme="light"] .host-frame__resize-handle {
+  background:
+    linear-gradient(135deg, transparent 0 48%, rgba(71, 85, 105, 0.82) 48% 56%, transparent 56% 100%),
+    rgba(255, 255, 255, 0.92);
 }
 
 .workbench__notes {

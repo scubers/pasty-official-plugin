@@ -1,8 +1,8 @@
-# Pasty 插件开发指南（v2）
+# 插件开发指南（v2）
 
 ## 1. 文档目标与适用范围
 
-这份文档是当前 Pasty v2 插件协议的开发手册。
+这份文档是当前 v2 插件协议的开发手册。
 
 适用范围：
 
@@ -28,7 +28,14 @@
 - 云同步内部实现
 - 尚未落地的未来能力
 
-如果你要从零开始做一个插件工程，优先参考 `plugins/template-plugin/`；如果你要看更完整的能力示例，再参考 `plugins/all-plugin-demo/`。
+如果你要从零开始做一个插件工程，直接以当前模板工程为起点；字段、协议和能力边界说明以本指南为准。
+
+当前模板工程默认演示的是“紧凑 metadata inspector”路线：
+
+- detector 直接覆盖 `text`、`image`、`path_reference`
+- action 直接覆盖 `text`、`image`、`path_reference`
+- attachment renderer 只展示关键字段，不铺大预览
+- copy 按钮默认输出完整 payload / item / session / draft JSON，方便作者观察真实输入
 
 ## 2. 插件整体模型
 
@@ -193,7 +200,7 @@ my-plugin/
 | --- | --- | --- | --- | --- | --- |
 | `id` | `string` | 是 | detector 在插件内的局部 ID | 不能为空 | 同一插件内必须唯一 |
 | `title` | `string` | 是 | detector 显示名称 | 不能为空 | 用于展示 |
-| `supportedInputKinds` | `string[]` | 是 | detector 支持的输入类型 | `text`、`image`、`pathReference` | 不允许空数组 |
+| `supportedInputKinds` | `string[]` | 是 | detector 支持的输入类型 | `text`、`image`、`path_reference` | 不允许空数组 |
 | `attachmentTypes` | `string[]` | 是 | detector 可能产出的 attachment type 列表 | 至少 1 项 | 每项都必须可渲染 |
 
 规则：
@@ -350,7 +357,7 @@ module.exports = definePlugin({
 | `input.item.text` | `string \| null` | 否 | 当前 item 的文本快照 | 文本 item 通常有值 | 非文本 item 可为 `null` |
 | `input.item.tags` | `string[]` | 是 | 当前 item tags | 缺省为空数组 | 只读 |
 | `input.item.sourceAppID` | `string` | 是 | 来源应用标识 | 缺省可为空字符串 | 只读 |
-| `input.content.kind` | `string` | 是 | 当前 detector 命中的内容类型 | `text`、`image`、`pathReference` | 必须与 manifest 对齐 |
+| `input.content.kind` | `string` | 是 | 当前 detector 命中的内容类型 | `text`、`image`、`path_reference` | 必须与 manifest 对齐 |
 | `input.content.payload` | `object` | 是 | 当前内容 payload | 随 `kind` 变化 | 见下表 |
 
 `input.content.payload` 取值：
@@ -359,7 +366,7 @@ module.exports = definePlugin({
 | --- | --- |
 | `text` | `{ text: string }` |
 | `image` | `{ dataBase64: string, width: number, height: number, format: string }` |
-| `pathReference` | `{ entries: ClipboardPathReferenceEntry[] }` |
+| `path_reference` | `{ entries: ClipboardPathReferenceEntry[] }` |
 
 返回值对象：
 
@@ -560,6 +567,12 @@ return {
 | `input.draft` | `object` | 是 | 当前 draft 全量快照 | 缺省为空对象 | 值类型为 `PluginJSONValue` |
 | `input.buttonID` | `string \| null` | 否 | 被触发的按钮 ID | `auto-run` 时通常为 `null` | 由宿主归一化 |
 | `input.triggerSource` | `string` | 是 | 触发来源 | `autoRun`、`hostButton`、`pluginUI` | 与 `buttonID` 分离 |
+
+注意：
+
+- 顶层 plugin action 只能拿到 item snapshot 与当前 draft/session 上下文。
+- 它拿不到 detector 模式里的 `input.content.payload.image.dataBase64` 或 `input.content.payload.path_reference.entries`。
+- 如果你想让 action UI 的 copy 按钮复制“更完整的 bootstrap/session 元数据”，需要像当前模板工程这样，把 UI 可见的 session 信息同步进 draft 或通过 UI run payload 带回 runtime。
 
 返回值对象：
 
@@ -1052,7 +1065,7 @@ if (!ctx.host.capabilities.canSetTags) {
 - 还在 manifest 里声明 action / renderer buttons。
 - 假设 UI 可以直接调用 `setTags` / `setPinned`。
 - 假设 detector 可以直接写 attachment 或搜索扩展。
-- 把 `supportedInputKinds` 写成 `path_reference`，或者把 `supportedItemTypes` 写成 `pathReference`。
+- 在任何 item type 字段里继续使用旧拼写，或者在 detector / action 之间混用两套拼写。
 
 如果只记住一条规则：
 

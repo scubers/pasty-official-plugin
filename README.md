@@ -1,8 +1,10 @@
 # Template Plugin
 
-`plugins/template-plugin/` 是给 Pasty 插件作者准备的最小全功能模板工程。
+`template-plugin/` 是给插件作者准备的最小全功能模板工程，也是当前提供给作者 fork 的源码型插件示例。
 
-它保留了 `all-plugin-demo` 的核心开发体验：
+字段约束、消息协议和能力边界以同目录的 `GUIDE.md` 为准；本 README 负责说明这个模板工程如何 fork、构建、预览和改造。
+
+它保留了参考插件工程需要的核心开发体验：
 
 - manifest + source-based runtime / UI 构建流程
 - 内嵌源码版 runtime SDK 与 UI bridge SDK
@@ -13,7 +15,7 @@
 
 当前模板默认走“紧凑元数据参考工程”路线：
 
-- detector 默认覆盖 `text`、`image`、`pathReference`
+- detector 默认覆盖 `text`、`image`、`path_reference`
 - action 默认覆盖 `text`、`image`、`path_reference`
 - renderer UI 默认低高度、少展示，只保留关键字段
 - copy 按钮默认复制完整 payload / session / item / draft JSON，方便作者直接观察真实输入
@@ -28,7 +30,7 @@
 - 保留 `src/runtime/sdk/` 与 `src/ui/sdk/` 作为内嵌 helper
 - 保留紧凑 metadata inspector 的布局骨架，只替换你自己的业务字段和 copy 逻辑
 
-如果你想看更完整、更像“功能演示”的作者案例，再看 `plugins/all-plugin-demo/`。
+如果你想查完整字段和 contract 说明，直接看同目录 `GUIDE.md`。
 
 ## 2. 工程结构
 
@@ -75,7 +77,7 @@ template-plugin/
 ### detector
 
 - 文件：`src/runtime/detectors/templateDetector.js`
-- 输入：`text`、`image`、`pathReference`
+- 输入：`text`、`image`、`path_reference`
 - 输出：一个 `plugin.template.full.preview` attachment
 - 作用：演示如何把三种 detector 输入统一映射成紧凑 preview payload，并额外保留完整 debug snapshot 供复制
 
@@ -124,7 +126,6 @@ template-plugin/
 安装依赖并构建：
 
 ```bash
-cd plugins/template-plugin
 npm install
 npm run build
 ```
@@ -145,10 +146,24 @@ npm run dev:action
 
 - `dev` 会打开本地 preview workbench，可在页面里切换 renderer / action、主题和 mock scenario。
 - `dev:renderer` / `dev:action` 会直接用对应 view 打开 workbench，适合只调单个界面。
-- 这个 workbench 会模拟固定容器尺寸、宿主 action strip、bootstrap / search / theme 事件。
-- 本地预览模式下没有真实宿主，因此 bridge 的执行类调用会退化为 `console.info(...)`，重点用于调布局、文案、响应式和固定高度表现。
+- 这个 workbench 会模拟可手动调整尺寸的宿主 viewport、位于宿主 chrome 的 resize 控件、宿主 action strip、bootstrap / search / theme 事件。
+- 本地预览模式下没有真实宿主，因此 bridge 的执行类调用会退化为 `console.info(...)`，重点用于调布局、文案、响应式和不同 viewport 尺寸下的表现。
 
-本地开发时，把 `plugins/template-plugin/` 作为 `Developer Plugins` 的路径加入宿主即可。
+本地开发时，把当前插件项目根目录作为 `Developer Plugins` 的路径加入宿主即可。
+
+如果你是把这个源码目录直接交给宿主安装，而不是走 `Developer Plugins` 开发模式：
+
+- `manifest.json` 已声明 `install.runtime` 与 `install.entry`
+- 宿主会在 staging plugin root 下先运行 `scripts/install.mjs`
+- install hook 完成后，宿主再校验 `dist/runtime/index.cjs` 和 `dist/ui/` 下的声明产物是否存在
+- 如果脚本本身退出失败，宿主会把它视为 install hook execution failure
+- 如果脚本成功但声明产物缺失，宿主会把它视为 runtime output validation failure
+
+`Developer Plugins` 模式的边界也要注意：
+
+- 宿主只消费 `manifest.json` 声明的 runtime/ui 产物，不负责自动安装依赖、自动 build、自动 watch 或自动 reload
+- 代码改动后需要你自己重新构建；下一次 capability 触发时宿主会读取最新产物
+- 如果你改了 `manifest.json`、capability 列表或入口路径，修改不会自动生效，需要手动 `Reload`
 
 ## 6. 开始改造时优先改哪些文件
 
@@ -186,8 +201,8 @@ npm run dev:action
 
 ## 8. 作者改模板时最常见的边界误解
 
-- detector 能看到 `input.content.payload`，所以它能区分 `text / image / pathReference` 的真实输入形状
-- top-level action 看不到 detector 输入里的 `image.dataBase64` 或 `pathReference.entries`
+- detector 能看到 `input.content.payload`，所以它能区分 `text / image / path_reference` 的真实输入形状
+- top-level action 看不到 detector 输入里的 `image.dataBase64` 或 `path_reference.entries`
 - renderer runtime 能拿到 item + attachment；如果要把 UI 侧 bootstrap/search/theme 一起复制出来，需要通过 `invokeOperation(..., params)` 把这些 UI 数据传回 runtime
 - UI 不直接拿宿主高权限能力；复制、tag、pin 等操作都应该回到 runtime 执行
 
@@ -201,5 +216,13 @@ npm run dev:action
   - 产出 runtime bundle 和 UI bundle
 - `node ./scripts/verify-build.mjs`
   - 校验构建产物路径和关键 runtime 注册项
+
+宿主内的最小 smoke 路径建议至少覆盖这些步骤：
+
+- 以源码目录直接安装，或把当前插件项目根目录加到 `Developer Plugins`
+- 准备一个 `text`、`image` 或 `path_reference` item，确认出现 `Template Preview`
+- 打开 renderer，确认 `Copy Payload` 和 `Copy Context` 可用
+- 触发 `Template Auto Action`，确认返回可复制的执行上下文文本
+- 触发 `Template Draft Action`，确认 `Copy Item JSON`、`Copy Session JSON`、`Copy Draft JSON` 和 `Apply Metadata` 都能运行
 
 如果你替换了页面名称、action ID 或 renderer ID，记得同步更新对应测试和 `verify-build.mjs`。
